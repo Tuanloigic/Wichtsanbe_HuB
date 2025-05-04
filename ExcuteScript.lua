@@ -1,89 +1,68 @@
--- Anti AFK để tránh bị kick
-game:GetService("Players").LocalPlayer.Idled:Connect(function()
-   game:GetService("VirtualUser"):Button2Down(Vector2.new(), workspace.CurrentCamera.CFrame)
-   wait(1)
-   game:GetService("VirtualUser"):Button2Up(Vector2.new(), workspace.CurrentCamera.CFrame)
+-- GUI bật/tắt Kill Aura bằng phím K
+local player = game.Players.LocalPlayer
+local gui = Instance.new("ScreenGui", player:WaitForChild("PlayerGui"))
+gui.ResetOnSpawn = false
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 200, 0, 100)
+frame.Position = UDim2.new(0, 10, 0, 10)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.Visible = false
+
+local button = Instance.new("TextButton", frame)
+button.Size = UDim2.new(1, -20, 0, 40)
+button.Position = UDim2.new(0, 10, 0, 30)
+button.Text = "Bật Kill Aura"
+button.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+button.TextColor3 = Color3.fromRGB(255, 255, 255)
+
+local killAura = false
+local UserInputService = game:GetService("UserInputService")
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.K then
+        frame.Visible = not frame.Visible
+    end
 end)
 
--- Kiểm tra xem mob có phải là người chơi không
-local function isPlayer(mob)
-   return game.Players:GetPlayerFromCharacter(mob) ~= nil
+local function isPlayer(char)
+    return game.Players:GetPlayerFromCharacter(char) ~= nil
 end
 
--- Biến điều khiển Kill Aura
-local killAuraEnabled = false -- Mặc định Kill Aura là tắt
+local function hasFire(model)
+    for _, v in ipairs(model:GetDescendants()) do
+        if v:IsA("ParticleEmitter") or v:IsA("Fire") then
+            return true
+        end
+    end
+    return false
+end
 
--- Tạo GUI trong màn hình
-local screenGui = Instance.new("ScreenGui")
-screenGui.Parent = game.Players.LocalPlayer:WaitForChild("PlayerGui")
-
-local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 200, 0, 100)  -- Kích thước của frame
-frame.Position = UDim2.new(0, 10, 0, 10)  -- Vị trí của frame
-frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)  -- Màu nền của frame
-frame.BackgroundTransparency = 0.5  -- Độ trong suốt của frame
-frame.Visible = false  -- Frame mặc định tắt
-frame.Parent = screenGui
-
-local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0, 180, 0, 50)  -- Kích thước của button
-toggleButton.Position = UDim2.new(0, 10, 0, 25)  -- Vị trí của button trong frame
-toggleButton.Text = "Bật Kill Aura"  -- Văn bản của button
-toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)  -- Màu chữ
-toggleButton.BackgroundColor3 = Color3.fromRGB(0, 255, 0)  -- Màu nền của button
-toggleButton.Parent = frame
-
--- Hàm Kill Aura: Giết tất cả các mob khi chúng spawn (trừ người chơi)
-local function killAllMobs()
-   while killAuraEnabled do
-      -- Kiểm tra chỉ các mob gần người chơi
-      local character = game.Players.LocalPlayer.Character
-      if character then
-         local playerPosition = character.HumanoidRootPart.Position
-         for _, mob in ipairs(workspace:FindFirstChild("Enemies", true):GetChildren()) do
+local function killNearby()
+    while killAura and task.wait(0.25) do
+        for _, mob in ipairs(workspace:GetDescendants()) do
             if mob:IsA("Model") and mob:FindFirstChild("Humanoid") and mob:FindFirstChild("HumanoidRootPart") then
-               local h = mob.Humanoid
-               local mobPosition = mob.HumanoidRootPart.Position
-               -- Tính khoảng cách giữa người chơi và mob, nếu mob gần, thì tấn công
-               if h.Health > 0 and not isPlayer(mob) and (mobPosition - playerPosition).Magnitude < 50 then
-                  -- Dịch đến vị trí spawn của mob
-                  local head = mob:FindFirstChild("Head") or mob.HumanoidRootPart
-                  if head then
-                     -- Dịch chuyển đến vị trí mob spawn
-                     game.Players.LocalPlayer.Character.HumanoidRootPart.CFrame = head.CFrame * CFrame.new(0, 0, 2)
-                  end
-
-                  -- Tấn công mob ngay khi chúng spawn
-                  spawn(function()
-                     while h and h.Health > 0 and mob.Parent and killAuraEnabled do
-                        task.wait(0.1)  -- Kiểm tra mỗi 0.1 giây để giảm tải
-                        pcall(function()
-                           -- Tấn công mob liên tục
-                           game:GetService("ReplicatedStorage").Remotes.Combat.Attack:FireServer(mob)
-                        end)
-                     end
-                  end)
-               end
+                if not isPlayer(mob) and mob.Humanoid.Health > 0 and not hasFire(mob) then
+                    local char = player.Character
+                    if char and char:FindFirstChild("HumanoidRootPart") then
+                        local dist = (mob.HumanoidRootPart.Position - char.HumanoidRootPart.Position).Magnitude
+                        if dist <= 60 then
+                            pcall(function()
+                                char.HumanoidRootPart.CFrame = mob.HumanoidRootPart.CFrame * CFrame.new(0, 0, 2)
+                                game:GetService("ReplicatedStorage"):FindFirstChild("Remotes").Combat.Attack:FireServer(mob)
+                            end)
+                        end
+                    end
+                end
             end
-         end
-      end
-      task.wait(1) -- Giảm tần suất kiểm tra các mob
-   end
+        end
+    end
 end
 
--- Hàm để bật và tắt Kill Aura khi nhấn button
-toggleButton.MouseButton1Click:Connect(function()
-   if killAuraEnabled then
-      killAuraEnabled = false
-      toggleButton.Text = "Bật Kill Aura"
-      frame.Visible = false  -- Tắt GUI khi Kill Aura bị tắt
-   else
-      killAuraEnabled = true
-      toggleButton.Text = "Tắt Kill Aura"
-      frame.Visible = true  -- Hiển thị GUI khi Kill Aura được bật
-      killAllMobs()  -- Khi bật lại, chạy lại hàm killAllMobs
-   end
+button.MouseButton1Click:Connect(function()
+    killAura = not killAura
+    button.Text = killAura and "Tắt Kill Aura" or "Bật Kill Aura"
+    button.BackgroundColor3 = killAura and Color3.fromRGB(170, 0, 0) or Color3.fromRGB(0, 170, 0)
+    if killAura then
+        task.spawn(killNearby)
+    end
 end)
-
--- Hiển thị frame khi game bắt đầu và frame là "nút" bật tắt Kill Aura
-frame.Visible = true
